@@ -1,0 +1,8 @@
+strands-agents==1.62.0
+strands-agents-tools==0.8.10
+openai==1.109.1
+yfinance==1.7.0
+cachetools==7.2.5
+python-dotenv==1.2.4
+requests==2.32.3
+boto3==1.43.118
