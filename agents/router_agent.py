@@ -4,7 +4,7 @@ import requests
 from langchain_aws import ChatBedrockConverse
 from langchain.tools import tool
 from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 _ROUTER_SYSTEM_PROMPT = """
 You are the assistant for a stock fundamental analysis service. Your only job is to understand what stock the user wants analyzed and trigger the analysis once confirmed.
@@ -96,10 +96,9 @@ def confirm_analysis(ticker: str, name: str) -> str:
 _graph = None
 
 
-def init_router() -> None:
-    """Call once at app startup to establish Redis connection and build the graph."""
+def init_router(checkpointer: BaseCheckpointSaver) -> None:
+    """Call once at app startup. Checkpointer is created and managed by the caller."""
     global _graph
-    checkpointer = MemorySaver()
     llm = ChatBedrockConverse(model_id=_MODEL_ID, region_name=_REGION)
     _graph = create_react_agent(
         model=llm,

@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import os
 import contextlib
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,6 +13,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
+from langgraph.checkpoint.postgres import PostgresSaver
+
 from agents.router_agent import init_router, run_router
 from agents.orchestrator import make_orchestrator
 from errors import AppError
@@ -19,8 +22,10 @@ from errors import AppError
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    init_router()
-    yield
+    with PostgresSaver.from_conn_string(os.getenv("DATABASE_URL")) as checkpointer:
+        checkpointer.setup()
+        init_router(checkpointer)
+        yield
 
 
 app = FastAPI(lifespan=lifespan)
