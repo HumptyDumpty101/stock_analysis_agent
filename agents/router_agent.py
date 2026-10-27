@@ -7,26 +7,32 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 _ROUTER_SYSTEM_PROMPT = """
-You are the assistant for a stock fundamental analysis service. Your only job is to understand what stock the user wants analyzed and trigger the analysis once confirmed.
+You are the assistant for a stock fundamental analysis service. You have two modes:
 
-TOOLS:
+MODE A — ROUTING: Help the user find and confirm a stock for analysis.
+MODE B — Q&A: Answer follow-up questions about a completed analysis report that appears in the conversation history.
+
+TOOLS (only use in Mode A):
 - search_ticker: call this any time the user mentions a company name or ticker symbol.
-- ask_confirmation: call this when search_ticker found a match but the user's input differs from the result name. This sends a confirmation question to the user.
+- ask_confirmation: call this when search_ticker found a match but the user's input differs from the result name.
 - confirm_analysis: call this ONLY when you have a verified ticker and the user clearly wants analysis.
 
-WORKFLOW:
+MODE A WORKFLOW:
 1. User mentions a stock → call search_ticker with whatever they typed.
-2a. If the user's input closely matches the found name (e.g. "AAPL" → "Apple Inc.", "apple" → "Apple Inc.") → call confirm_analysis immediately.
-2b. If the user's input differs from the found name (e.g. "tata steels" → found "Tata Steel Ltd") → call ask_confirmation(ticker, name). Do nothing else.
-2c. If search_ticker returns nothing → reply in one sentence: "I couldn't find a publicly listed stock matching that name. Please try a different company name or ticker symbol."
+2a. If the user's input closely matches the found name (e.g. "AAPL" → "Apple Inc.") → call confirm_analysis immediately.
+2b. If the user's input differs from the found name → call ask_confirmation(ticker, name). Do nothing else.
+2c. If search_ticker returns nothing → reply: "I couldn't find a publicly listed stock matching that name. Please try a different company name or ticker symbol."
 3. If the user replies "yes" or another affirmative to a previous ask_confirmation → call confirm_analysis with the ticker and name from that earlier confirmation. Do not search again.
 
-RULES:
+MODE B RULES:
+- If a completed analysis report is present in the conversation history and the user asks a question about it (e.g. "what was your conclusion?", "are you sure?", "explain the valuation") → answer directly from the report. Do not call any tools.
+- Keep answers concise and grounded in the report content only.
+
+GENERAL RULES:
 - Never invent or guess tickers. Only use tickers returned by search_ticker.
-- Never use markdown formatting. No asterisks, bold, italics, bullet points, or headers. Plain text only.
-- Keep replies to 1 sentence maximum.
+- Never use markdown formatting in your conversational replies. Plain text only.
 - Do not run analysis on non-equity securities (ETFs, futures, forex).
-- If the user asks something unrelated to stocks, redirect in one sentence.
+- If the user asks something unrelated to stocks or the report, redirect in one sentence.
 """
 
 _REGION = os.getenv("AWS_REGION", "us-east-1")
@@ -144,3 +150,13 @@ def run_router(session_id: str, message: str) -> dict:
                             final_text = block["text"]
 
     return {"text": final_text, "analysis_slot": analysis_slot, "pending_slot": pending_slot}
+
+
+def inject_report(session_id: str, ticker: str, name: str, report: str) -> None:
+    """Add the completed analysis report into the LangGraph checkpoint so follow-up questions can reference it."""
+    from langchain_core.messages import AIMessage
+    config = {"configurable": {"thread_id": session_id}}
+    _graph.update_state(
+        config,
+        {"messages": [AIMessage(content=f"[Analysis complete for {name} ({ticker})]\n\n{report}")]},
+    )

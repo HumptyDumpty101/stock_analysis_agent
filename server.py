@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from langgraph.checkpoint.postgres import PostgresSaver
 
-from agents.router_agent import init_router, run_router
+from agents.router_agent import init_router, run_router, inject_report
 from agents.orchestrator import make_orchestrator
 from errors import AppError
 
@@ -69,7 +69,7 @@ def _run_orchestrator(prompt: str) -> str:
         loop.close()
 
 
-async def _stream_analysis(ticker: str, name: str):
+async def _stream_analysis(ticker: str, name: str, session_id: str):
     """Async generator that runs the orchestrator and yields SSE strings."""
     loop = asyncio.get_event_loop()
     prompt = (
@@ -94,6 +94,7 @@ async def _stream_analysis(ticker: str, name: str):
 
     try:
         report = await task
+        inject_report(session_id=session_id, ticker=ticker, name=name, report=report)
         yield sse({"event": "result", "ticker": ticker, "name": name, "report": report})
     except Exception:
         yield sse({"event": "error", **AppError("AGNT003").json})
@@ -118,7 +119,7 @@ async def chat(req: ChatRequest):
 
         if result["analysis_slot"]:
             slot = result["analysis_slot"]
-            async for chunk in _stream_analysis(slot["ticker"], slot["name"]):
+            async for chunk in _stream_analysis(slot["ticker"], slot["name"], req.session_id):
                 yield chunk
         elif result["pending_slot"]:
             slot = result["pending_slot"]
