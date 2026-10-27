@@ -7,15 +7,26 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
-from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
 from agents.router_agent import make_router_agent
 from agents.orchestrator import make_orchestrator
 from session import load_history, save_history
+from errors import AppError
 
 app = FastAPI()
+
+
+@app.exception_handler(AppError)
+async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content=exc.json)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(status_code=500, content=AppError("GEN001").json)
 
 
 class ChatRequest(BaseModel):
@@ -34,7 +45,6 @@ PHASE_SCHEDULE = [
 
 
 def _run_orchestrator(prompt: str) -> str:
-    """Run a fresh orchestrator instance in a thread with its own event loop."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     buf = io.StringIO()
@@ -60,14 +70,15 @@ async def chat(req: ChatRequest):
     async def event_stream():
         loop = asyncio.get_event_loop()
 
-        # Run the router agent (fast: intent + optional search_ticker call)
-        router_result = await loop.run_in_executor(None, lambda: router(req.message))
+        try:
+            router_result = await loop.run_in_executor(None, lambda: router(req.message))
+        except Exception:
+            yield sse({"event": "error", **AppError("GEN001").json})
+            return
 
-        # Persist updated conversation (router's full message list includes tool turns)
         updated_history = list(router.messages)
 
         if analysis_slot:
-            # Router triggered an analysis — save history then stream phases
             await save_history(req.session_id, updated_history)
 
             ticker = analysis_slot["ticker"]
@@ -97,10 +108,9 @@ async def chat(req: ChatRequest):
                 report = await task
                 yield sse({"event": "result", "ticker": ticker, "name": name, "report": report})
             except Exception:
-                yield sse({"event": "error", "message": "Analysis failed. Please try again."})
+                yield sse({"event": "error", **AppError("AGNT003").json})
 
         else:
-            # Conversational reply — save history and return message
             await save_history(req.session_id, updated_history)
             yield sse({"event": "message", "text": str(router_result)})
 
