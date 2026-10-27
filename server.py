@@ -11,9 +11,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
-from agents.router_agent import make_router_agent
+from agents.router_agent import run_router
 from agents.orchestrator import make_orchestrator
-from session import load_history, save_history
 from errors import AppError
 
 app = FastAPI()
@@ -57,6 +56,36 @@ def _run_orchestrator(prompt: str) -> str:
         loop.close()
 
 
+async def _stream_analysis(ticker: str, name: str):
+    """Async generator that runs the orchestrator and yields SSE strings."""
+    loop = asyncio.get_event_loop()
+    prompt = (
+        f"Perform a complete fundamental analysis for the stock ticker: {ticker}\n"
+        f"Follow the full workflow: gather financial data, news sentiment, and risk "
+        f"assessment, then run valuation, and finally produce the investment brief."
+    )
+    task = loop.run_in_executor(None, _run_orchestrator, prompt)
+
+    yield sse({"event": "phase", "phase": 1, "label": "Gathering market data…"})
+
+    start = loop.time()
+    next_phase = 0
+    while not task.done():
+        await asyncio.sleep(3)
+        elapsed = loop.time() - start
+        while next_phase < len(PHASE_SCHEDULE) and elapsed >= PHASE_SCHEDULE[next_phase][0]:
+            _, phase_num, label = PHASE_SCHEDULE[next_phase]
+            yield sse({"event": "phase", "phase": phase_num, "label": label})
+            next_phase += 1
+        yield ": keepalive\n\n"
+
+    try:
+        report = await task
+        yield sse({"event": "result", "ticker": ticker, "name": name, "report": report})
+    except Exception:
+        yield sse({"event": "error", **AppError("AGNT003").json})
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -64,55 +93,28 @@ def health():
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    history = await load_history(req.session_id)
-    router, analysis_slot = make_router_agent(history)
-
     async def event_stream():
         loop = asyncio.get_event_loop()
-
         try:
-            router_result = await loop.run_in_executor(None, lambda: router(req.message))
+            result = await loop.run_in_executor(
+                None, lambda: run_router(req.session_id, req.message)
+            )
         except Exception:
             yield sse({"event": "error", **AppError("GEN001").json})
             return
 
-        updated_history = list(router.messages)
-
-        if analysis_slot:
-            await save_history(req.session_id, updated_history)
-
-            ticker = analysis_slot["ticker"]
-            name = analysis_slot["name"]
-            prompt = (
-                f"Perform a complete fundamental analysis for the stock ticker: {ticker}\n"
-                f"Follow the full workflow: gather financial data, news sentiment, and risk "
-                f"assessment, then run valuation, and finally produce the investment brief."
-            )
-
-            task = loop.run_in_executor(None, _run_orchestrator, prompt)
-
-            yield sse({"event": "phase", "phase": 1, "label": "Gathering market data…"})
-
-            start = loop.time()
-            next_phase = 0
-            while not task.done():
-                await asyncio.sleep(3)
-                elapsed = loop.time() - start
-                while next_phase < len(PHASE_SCHEDULE) and elapsed >= PHASE_SCHEDULE[next_phase][0]:
-                    _, phase_num, label = PHASE_SCHEDULE[next_phase]
-                    yield sse({"event": "phase", "phase": phase_num, "label": label})
-                    next_phase += 1
-                yield ": keepalive\n\n"
-
-            try:
-                report = await task
-                yield sse({"event": "result", "ticker": ticker, "name": name, "report": report})
-            except Exception:
-                yield sse({"event": "error", **AppError("AGNT003").json})
-
+        if result["analysis_slot"]:
+            slot = result["analysis_slot"]
+            async for chunk in _stream_analysis(slot["ticker"], slot["name"]):
+                yield chunk
+        elif result["pending_slot"]:
+            slot = result["pending_slot"]
+            yield sse({
+                "event": "message",
+                "text": f"Did you mean {slot['name']} ({slot['ticker']})? Reply yes to run a fundamental analysis.",
+            })
         else:
-            await save_history(req.session_id, updated_history)
-            yield sse({"event": "message", "text": str(router_result)})
+            yield sse({"event": "message", "text": result["text"]})
 
     return StreamingResponse(
         event_stream(),
