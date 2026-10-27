@@ -1,4 +1,5 @@
 import os
+from typing import Callable
 
 from strands import Agent
 from strands.models.bedrock import BedrockModel
@@ -62,13 +63,16 @@ IMPORTANT RULES:
 - Use a confident, professional tone. Avoid hedging every sentence.
 """
 
-report_writer_agent = Agent(
-    name="ReportWriterAgent",
-    model=BedrockModel(
-        model_id=os.getenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-4-6"),
-        region_name=os.getenv("AWS_REGION", "us-east-1"),
-    ),
-    system_prompt=REPORT_WRITER_INSTRUCTIONS,
-    tools=[],  # pure synthesis -- no external tools needed
-    callback_handler=None,
-)
+
+def make_report_writer_agent(callback_handler: Callable | None = None) -> Agent:
+    """Create a ReportWriterAgent. Pass a callback_handler to capture streaming tokens."""
+    return Agent(
+        name="ReportWriterAgent",
+        model=BedrockModel(
+            model_id=os.getenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-4-6"),
+            region_name=os.getenv("AWS_REGION", "us-east-1"),
+        ),
+        system_prompt=REPORT_WRITER_INSTRUCTIONS,
+        tools=[],
+        callback_handler=callback_handler,
+    )

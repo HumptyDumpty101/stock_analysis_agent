@@ -7,12 +7,11 @@ from .financial_data_agent import financial_data_agent
 from .valuation_agent import valuation_agent
 from .news_sentiment_agent import news_sentiment_agent
 from .risk_agent import risk_agent
-from .report_writer_agent import report_writer_agent
 
 ORCHESTRATOR_INSTRUCTIONS = """
 You are a senior investment analyst orchestrating a full fundamental analysis.
-You coordinate a team of specialist sub-agents and synthesize their findings
-into a final investment brief.
+You coordinate a team of specialist sub-agents and return their combined findings
+for downstream report writing.
 
 Given a stock ticker symbol, execute the following workflow:
 
@@ -37,23 +36,31 @@ from the Step 1a output). The ticker must appear on the first line.
     ---END FINANCIAL CONTEXT---
 If a value is not available in the Step 1a output, write "N/A".
 
-PHASE 3 -- SYNTHESIS:
-Step 3: Call write_investment_report with ALL findings from Steps 1a, 1b, 1c, and 2.
-Structure your input as:
-    FINANCIAL DATA ANALYSIS:    [output from step 1a]
-    NEWS & SENTIMENT ANALYSIS:  [output from step 1b]
-    RISK ASSESSMENT:            [output from step 1c]
-    VALUATION ANALYSIS:         [output from step 2]
+PHASE 3 -- RETURN COMBINED ANALYSIS:
+After completing Phases 1 and 2, format your entire final response as:
+
+FINANCIAL DATA ANALYSIS:
+[verbatim output from financial_data_analysis]
+
+NEWS & SENTIMENT ANALYSIS:
+[verbatim output from news_and_sentiment_analysis]
+
+RISK ASSESSMENT:
+[verbatim output from risk_assessment]
+
+VALUATION ANALYSIS:
+[verbatim output from valuation_analysis]
+
+This is your complete final output. Do not add any commentary, conclusion, or
+additional text. The four labeled sections above are all that is needed.
 
 IMPORTANT:
 - Do not skip any step. All four specialist analyses are required.
-- If a sub-agent returns an error for any tool, note it in the final report
-  rather than stopping the workflow entirely.
-- Your final output must be the ReportWriterAgent's output copied verbatim,
-  character for character. Do not add commentary, remove sections, reformat,
-  or summarize any part of it.
+- If a sub-agent returns an error for any tool, copy the error message verbatim
+  into its section rather than stopping the workflow entirely.
 - Be patient: the workflow has multiple API calls and may take 30-60 seconds.
 """
+
 
 def make_orchestrator() -> Agent:
     """Create a fresh OrchestratorAgent per request (avoids singleton concurrency issues)."""
@@ -95,14 +102,6 @@ def make_orchestrator() -> Agent:
                     "Estimates the intrinsic value of a stock using DCF modeling and "
                     "peer multiples comparison. Returns intrinsic value per share, "
                     "upside/downside percentage, and a valuation verdict."
-                ),
-            ),
-            report_writer_agent.as_tool(
-                name="write_investment_report",
-                description=(
-                    "Synthesizes all analysis (financial data, valuation, sentiment, risk) "
-                    "into a final, professional investment brief. Takes the combined "
-                    "findings from all specialist agents and produces the final report."
                 ),
             ),
         ],
