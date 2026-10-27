@@ -13,6 +13,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
+from psycopg_pool import ConnectionPool
+from psycopg.rows import dict_row
 from langgraph.checkpoint.postgres import PostgresSaver
 
 from agents.router_agent import init_router, run_router, inject_report
@@ -23,10 +25,22 @@ from errors import AppError
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    with PostgresSaver.from_conn_string(os.getenv("DATABASE_URL")) as checkpointer:
+    # min_size=0: no idle connections kept — each request gets a fresh connection,
+    # so NeonDB serverless suspend never leaves stale connections in the pool.
+    pool = ConnectionPool(
+        conninfo=os.getenv("DATABASE_URL"),
+        min_size=0,
+        max_size=5,
+        kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+        open=True,
+    )
+    try:
+        checkpointer = PostgresSaver(pool)
         checkpointer.setup()
         init_router(checkpointer)
         yield
+    finally:
+        pool.close()
 
 
 app = FastAPI(lifespan=lifespan)
