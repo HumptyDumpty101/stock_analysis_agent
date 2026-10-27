@@ -2,6 +2,7 @@ import json
 
 import yfinance as yf
 from strands import tool
+from langchain.tools import tool as lc_tool
 
 from .utils import _safe_float, _millions, _extract_row, make_cached
 
@@ -213,3 +214,29 @@ def compute_key_ratios(ticker: str) -> str:
             return json.dumps({"error": str(e), "ticker": ticker})
 
     return _cached(f"ratios:{ticker.upper()}", fetch)
+
+
+# ── LangChain Q&A wrappers (cache-only, used by RouterAgent) ─────────────────
+
+@lc_tool
+def query_income_statement(ticker: str) -> str:
+    """Get cached income statement for a previously analyzed stock. Returns revenue, profit, and margin data."""
+    return _cached(f"income:{ticker.upper()}", lambda: "", cache_only=True)
+
+
+@lc_tool
+def query_balance_sheet(ticker: str) -> str:
+    """Get cached balance sheet for a previously analyzed stock. Returns assets, liabilities, equity, and debt."""
+    return _cached(f"balance:{ticker.upper()}", lambda: "", cache_only=True)
+
+
+@lc_tool
+def query_cash_flow(ticker: str) -> str:
+    """Get cached cash flow data for a previously analyzed stock. Returns operating cash flow, capex, and FCF."""
+    return _cached(f"cashflow:{ticker.upper()}", lambda: "", cache_only=True)
+
+
+@lc_tool
+def query_key_ratios(ticker: str) -> str:
+    """Get cached key financial ratios for a previously analyzed stock. Returns P/E, ROE, margins, growth rates, and valuation multiples."""
+    return _cached(f"ratios:{ticker.upper()}", lambda: "", cache_only=True)

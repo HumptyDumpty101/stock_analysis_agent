@@ -1,3 +1,4 @@
+import json
 import math
 from threading import Lock
 
@@ -28,21 +29,37 @@ def _extract_row(df, *names, col):
 
 
 def make_cached(ttl: int = 86_400):
-    """Return a cached(key, fetch_fn) closure backed by a TTLCache.
+    """Return a cached(key, fetch_fn, cache_only) closure.
 
-    Each call creates an independent cache — callers get their own TTL.
+    Checks Redis first, falls back to in-memory TTLCache, then fetches from API.
+    If cache_only=True, returns an error dict instead of hitting the API.
     Financial data: ttl=86_400 (24 h). News: ttl=3_600 (1 h).
     """
-    _cache = TTLCache(maxsize=100, ttl=ttl)
-    _lock  = Lock()
+    _mem = TTLCache(maxsize=100, ttl=ttl)
+    _lock = Lock()
 
-    def _cached(key: str, fetch_fn):
+    def _cached(key: str, fetch_fn, cache_only: bool = False) -> str:
+        from .cache import cache_get, cache_set
+
+        # 1. Redis
+        val = cache_get(key)
+        if val:
+            return val
+
+        # 2. In-memory
         with _lock:
-            if key in _cache:
-                return _cache[key]
+            if key in _mem:
+                return _mem[key]
+
+        # 3. cache_only — don't hit the API
+        if cache_only:
+            return json.dumps({"error": f"No cached data for {key}. Run a full analysis first."})
+
+        # 4. Fetch from API then populate both caches
         result = fetch_fn()
+        cache_set(key, result, ttl=ttl)
         with _lock:
-            _cache[key] = result
+            _mem[key] = result
         return result
 
     return _cached

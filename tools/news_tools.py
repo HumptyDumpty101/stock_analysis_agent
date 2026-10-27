@@ -5,6 +5,7 @@ import os
 import boto3
 import requests
 from strands import tool
+from langchain.tools import tool as lc_tool
 
 from .utils import make_cached
 
@@ -243,3 +244,11 @@ def analyze_sentiment(news_json: str) -> str:
         return json.dumps(result, default=str)
     except Exception as e:
         return json.dumps({"error": str(e), "ticker": ticker})
+
+
+# ── LangChain Q&A wrapper (cache-only, used by RouterAgent) ──────────────────
+
+@lc_tool
+def query_news_sentiment(ticker: str) -> str:
+    """Get cached news and sentiment analysis for a previously analyzed stock. Returns sentiment verdict, key themes, and risk flags."""
+    return _cached(f"news:{ticker.upper()}:15", lambda: "", cache_only=True)

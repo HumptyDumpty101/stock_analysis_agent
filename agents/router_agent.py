@@ -6,6 +6,9 @@ from langchain.tools import tool
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
+from tools.financial_tools import query_income_statement, query_balance_sheet, query_cash_flow, query_key_ratios
+from tools.news_tools import query_news_sentiment
+
 _ROUTER_SYSTEM_PROMPT = """
 You are the assistant for a stock fundamental analysis service. You have two modes:
 
@@ -25,8 +28,10 @@ MODE A WORKFLOW:
 3. If the user replies "yes" or another affirmative to a previous ask_confirmation → call confirm_analysis with the ticker and name from that earlier confirmation. Do not search again.
 
 MODE B RULES:
-- If a completed analysis report is present in the conversation history and the user asks a question about it (e.g. "what was your conclusion?", "are you sure?", "explain the valuation") → answer directly from the report. Do not call any tools.
-- Keep answers concise and grounded in the report content only.
+- If a completed analysis report is present in the conversation history and the user asks a question about it → answer from the report first.
+- For specific data questions (e.g. "what was the exact P/E?", "show me the revenue numbers", "what did the news say?") → use the query_* tools to fetch the cached raw data for that ticker, then answer precisely.
+- Available Q&A tools: query_key_ratios, query_income_statement, query_balance_sheet, query_cash_flow, query_news_sentiment.
+- Keep answers concise and grounded in the data only.
 
 GENERAL RULES:
 - Never invent or guess tickers. Only use tickers returned by search_ticker.
@@ -108,7 +113,11 @@ def init_router(checkpointer: BaseCheckpointSaver) -> None:
     llm = ChatBedrockConverse(model_id=_MODEL_ID, region_name=_REGION)
     _graph = create_react_agent(
         model=llm,
-        tools=[search_ticker, ask_confirmation, confirm_analysis],
+        tools=[
+            search_ticker, ask_confirmation, confirm_analysis,
+            query_key_ratios, query_income_statement, query_balance_sheet,
+            query_cash_flow, query_news_sentiment,
+        ],
         prompt=_ROUTER_SYSTEM_PROMPT,
         checkpointer=checkpointer,
     )
