@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import contextlib
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -11,11 +12,18 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
-from agents.router_agent import run_router
+from agents.router_agent import init_router, run_router
 from agents.orchestrator import make_orchestrator
 from errors import AppError
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    init_router()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.exception_handler(AppError)

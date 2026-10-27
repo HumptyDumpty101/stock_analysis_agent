@@ -94,21 +94,23 @@ def confirm_analysis(ticker: str, name: str) -> str:
     return f"Analysis confirmed for {name} ({ticker}). The pipeline will now run."
 
 
-def _get_graph():
+_graph = None
+
+
+def init_router() -> None:
+    """Call once at app startup to establish Redis connection and build the graph."""
     global _graph
-    if _graph is None:
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-        redis_conn = Redis.from_url(redis_url)
-        checkpointer = RedisSaver(redis_conn)
-        checkpointer.setup()
-        llm = ChatBedrockConverse(model_id=_MODEL_ID, region_name=_REGION)
-        _graph = create_react_agent(
-            model=llm,
-            tools=[search_ticker, ask_confirmation, confirm_analysis],
-            prompt=_ROUTER_SYSTEM_PROMPT,
-            checkpointer=checkpointer,
-        )
-    return _graph
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    redis_conn = Redis.from_url(redis_url)
+    checkpointer = RedisSaver(redis_conn)
+    checkpointer.setup()
+    llm = ChatBedrockConverse(model_id=_MODEL_ID, region_name=_REGION)
+    _graph = create_react_agent(
+        model=llm,
+        tools=[search_ticker, ask_confirmation, confirm_analysis],
+        prompt=_ROUTER_SYSTEM_PROMPT,
+        checkpointer=checkpointer,
+    )
 
 
 def run_router(session_id: str, message: str) -> dict:
@@ -118,7 +120,7 @@ def run_router(session_id: str, message: str) -> dict:
 
     Returns {"text": str, "analysis_slot": dict|None, "pending_slot": dict|None}.
     """
-    graph = _get_graph()
+    graph = _graph
     config = {
         "configurable": {
             "thread_id": session_id,
