@@ -13,4 +13,3 @@ langchain>=1.4.0,<2.0.0
 langchain-aws>=1.8.0,<2.0.0
 langchain-core>=1.6.0,<2.0.0
 langgraph>=1.2.0,<2.0.0
-langgraph-checkpoint-redis>=0.5.0,<1.0.0

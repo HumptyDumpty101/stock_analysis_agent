@@ -4,8 +4,7 @@ import requests
 from langchain_aws import ChatBedrockConverse
 from langchain.tools import tool
 from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.redis import RedisSaver
-from redis import Redis
+from langgraph.checkpoint.memory import MemorySaver
 
 _ROUTER_SYSTEM_PROMPT = """
 You are the assistant for a stock fundamental analysis service. Your only job is to understand what stock the user wants analyzed and trigger the analysis once confirmed.
@@ -100,10 +99,7 @@ _graph = None
 def init_router() -> None:
     """Call once at app startup to establish Redis connection and build the graph."""
     global _graph
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-    redis_conn = Redis.from_url(redis_url)
-    checkpointer = RedisSaver(redis_conn)
-    checkpointer.setup()
+    checkpointer = MemorySaver()
     llm = ChatBedrockConverse(model_id=_MODEL_ID, region_name=_REGION)
     _graph = create_react_agent(
         model=llm,
