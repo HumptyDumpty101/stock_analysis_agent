@@ -1,10 +1,11 @@
 import os
 
 import requests
-from langchain.agents import create_agent
-from langchain.chat_models import init_chat_model
+from langchain_aws import ChatBedrockConverse
 from langchain.tools import tool
+from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.redis import RedisSaver
+from redis import Redis
 
 _ROUTER_SYSTEM_PROMPT = """
 You are the assistant for a stock fundamental analysis service. Your only job is to understand what stock the user wants analyzed and trigger the analysis once confirmed.
@@ -97,13 +98,14 @@ def _get_graph():
     global _graph
     if _graph is None:
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-        checkpointer = RedisSaver.from_conn_string(redis_url)
+        redis_conn = Redis.from_url(redis_url)
+        checkpointer = RedisSaver(redis_conn)
         checkpointer.setup()
-        llm = init_chat_model(_MODEL_ID, model_provider="bedrock_converse", region_name=_REGION)
-        _graph = create_agent(
+        llm = ChatBedrockConverse(model_id=_MODEL_ID, region_name=_REGION)
+        _graph = create_react_agent(
             model=llm,
             tools=[search_ticker, ask_confirmation, confirm_analysis],
-            system_prompt=_ROUTER_SYSTEM_PROMPT,
+            prompt=_ROUTER_SYSTEM_PROMPT,
             checkpointer=checkpointer,
         )
     return _graph
@@ -129,8 +131,8 @@ def run_router(session_id: str, message: str) -> dict:
     final_text = ""
 
     for chunk in graph.stream(inputs, stream_mode="updates", config=config):
-        if "model" in chunk:
-            for msg in chunk["model"]["messages"]:
+        if "agent" in chunk:
+            for msg in chunk["agent"]["messages"]:
                 for tc in getattr(msg, "tool_calls", []):
                     if tc["name"] == "confirm_analysis":
                         analysis_slot = tc["args"]
