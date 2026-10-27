@@ -55,53 +55,56 @@ IMPORTANT:
 - Be patient: the workflow has multiple API calls and may take 30-60 seconds.
 """
 
-orchestrator = Agent(
-    name="OrchestratorAgent",
-    model=BedrockModel(
-        model_id=os.getenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-4-6"),
-        region_name=os.getenv("AWS_REGION", "us-east-1"),
-    ),
-    system_prompt=ORCHESTRATOR_INSTRUCTIONS,
-    tools=[
-        financial_data_agent.as_tool(
-            name="financial_data_analysis",
-            description=(
-                "Fetches and analyzes financial statements (income statement, "
-                "balance sheet, cash flow) and computes key fundamental ratios "
-                "for a given stock ticker. Returns a financial health verdict."
-            ),
+def make_orchestrator() -> Agent:
+    """Create a fresh OrchestratorAgent per request (avoids singleton concurrency issues)."""
+    return Agent(
+        name="OrchestratorAgent",
+        model=BedrockModel(
+            model_id=os.getenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-4-6"),
+            region_name=os.getenv("AWS_REGION", "us-east-1"),
         ),
-        news_sentiment_agent.as_tool(
-            name="news_and_sentiment_analysis",
-            description=(
-                "Retrieves recent news headlines and performs sentiment analysis "
-                "for a given stock ticker. Returns sentiment verdict, key themes, "
-                "and any material risk flags from news."
+        system_prompt=ORCHESTRATOR_INSTRUCTIONS,
+        tools=[
+            financial_data_agent.as_tool(
+                name="financial_data_analysis",
+                description=(
+                    "Fetches and analyzes financial statements (income statement, "
+                    "balance sheet, cash flow) and computes key fundamental ratios "
+                    "for a given stock ticker. Returns a financial health verdict."
+                ),
             ),
-        ),
-        risk_agent.as_tool(
-            name="risk_assessment",
-            description=(
-                "Performs a comprehensive risk assessment for a given stock ticker. "
-                "Examines balance sheet stress points, leverage ratios, liquidity, "
-                "and news-based risk events. Returns a risk register and verdict."
+            news_sentiment_agent.as_tool(
+                name="news_and_sentiment_analysis",
+                description=(
+                    "Retrieves recent news headlines and performs sentiment analysis "
+                    "for a given stock ticker. Returns sentiment verdict, key themes, "
+                    "and any material risk flags from news."
+                ),
             ),
-        ),
-        valuation_agent.as_tool(
-            name="valuation_analysis",
-            description=(
-                "Estimates the intrinsic value of a stock using DCF modeling and "
-                "peer multiples comparison. Returns intrinsic value per share, "
-                "upside/downside percentage, and a valuation verdict."
+            risk_agent.as_tool(
+                name="risk_assessment",
+                description=(
+                    "Performs a comprehensive risk assessment for a given stock ticker. "
+                    "Examines balance sheet stress points, leverage ratios, liquidity, "
+                    "and news-based risk events. Returns a risk register and verdict."
+                ),
             ),
-        ),
-        report_writer_agent.as_tool(
-            name="write_investment_report",
-            description=(
-                "Synthesizes all analysis (financial data, valuation, sentiment, risk) "
-                "into a final, professional investment brief. Takes the combined "
-                "findings from all specialist agents and produces the final report."
+            valuation_agent.as_tool(
+                name="valuation_analysis",
+                description=(
+                    "Estimates the intrinsic value of a stock using DCF modeling and "
+                    "peer multiples comparison. Returns intrinsic value per share, "
+                    "upside/downside percentage, and a valuation verdict."
+                ),
             ),
-        ),
-    ],
-)
+            report_writer_agent.as_tool(
+                name="write_investment_report",
+                description=(
+                    "Synthesizes all analysis (financial data, valuation, sentiment, risk) "
+                    "into a final, professional investment brief. Takes the combined "
+                    "findings from all specialist agents and produces the final report."
+                ),
+            ),
+        ],
+        callback_handler=None,
+    )
