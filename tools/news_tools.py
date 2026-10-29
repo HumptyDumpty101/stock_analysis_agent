@@ -11,7 +11,7 @@ from .utils import make_cached
 
 _cached = make_cached(ttl=3_600)  # news expires in 1 h
 
-_BEDROCK_MODEL  = os.getenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-4-6")
+_BEDROCK_MODEL  = os.getenv("BEDROCK_HAIKU_MODEL_ID", "global.anthropic.claude-haiku-4-5-20251001")
 _BEDROCK_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 

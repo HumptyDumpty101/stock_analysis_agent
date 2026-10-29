@@ -43,7 +43,7 @@ GENERAL RULES:
 """
 
 _REGION = os.getenv("AWS_REGION", "us-east-1")
-_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-4-6")
+_MODEL_ID = os.getenv("BEDROCK_HAIKU_MODEL_ID", "global.anthropic.claude-haiku-4-5-20251001")
 
 _graph = None
 

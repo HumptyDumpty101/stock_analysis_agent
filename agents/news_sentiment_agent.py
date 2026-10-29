@@ -43,7 +43,7 @@ than ten generic "stock rises" headlines.
 news_sentiment_agent = Agent(
     name="NewsAndSentimentAgent",
     model=BedrockModel(
-        model_id=os.getenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-4-6"),
+        model_id=os.getenv("BEDROCK_HAIKU_MODEL_ID", "global.anthropic.claude-haiku-4-5-20251001"),
         region_name=os.getenv("AWS_REGION", "us-east-1"),
     ),
     system_prompt=NEWS_SENTIMENT_INSTRUCTIONS,
